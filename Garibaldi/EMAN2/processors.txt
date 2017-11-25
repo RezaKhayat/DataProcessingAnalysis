@@ -1,2 +1,0 @@
-Circular mask with gaussian fall off:
---process=mask.sharp:dx=0:dy=0:dz=0.0:inner_radius=14:outer_radius=60:value=0.0
