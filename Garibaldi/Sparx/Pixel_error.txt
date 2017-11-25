@@ -1,2 +1,0 @@
-1. the thld_err in sxisac.py is the pixel error used to determine if a particle belongs to an average or not.
-2. 
