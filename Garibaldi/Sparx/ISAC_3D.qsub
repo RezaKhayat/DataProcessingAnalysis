@@ -1,0 +1,63 @@
+#PBS -l nodes=24:ppn=4
+#PBS -l walltime=300:00:00
+#PBS -l cput=300:00:00
+#PBS -l mem=128gb
+
+cd /gpfs/home/rkhayat/Wilson/CR9112-H9
+source ~/Applications/EMAN2/eman2.cshrc
+
+module load openmpi
+
+# set number of processors
+set proc = 96
+
+set stack = start 
+set ou = 50
+set bin = 4
+set generations = 4
+set imp_per_grp = 50 
+set stab_ali = 5
+set thld_err = 4
+
+rm -f recon_ISAC_3D
+ln -s $PBSREMOTEDIR recon_ISAC_3D
+chmod 755 recon_ISAC_3D
+cd recon_ISAC_3D
+
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12feb14d/stacks/CTF/start_untilt.hed .
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12feb14d/stacks/CTF/start_untilt.img .
+
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12feb14d/stacks/CTF/start_tilt.hed .
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12feb14d/stacks/CTF/start_tilt.img .
+
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12feb14d/stacks/CTF/ctf_particles.sparx .
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12feb14d/stacks/CTF/ctf_particles.frealign .
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12feb14d/stacks/CTF/tilt_particles.tilt .
+
+if ( $bin > 1 ) then
+  e2proc2d.py start_untilt.hed bdb:Full_Stack --process=normalize
+  e2proc2d.py start_tilt.hed bdb:Full_Stack --process=normalize
+  sxheader.py bdb:Full_Stack --import=ctf_particles.sparx --params=ctf
+  sxprocess.py bdb:Full_Stack bdb:ctfFull_Stack --phase_flip
+  e2proc2d.py bdb:ctfFull_Stack bdb:{$stack} --meanshrink={$bin}
+else
+  sxcpy.py Full_Stack.hed bdb:{$stack}
+endif
+
+sxheader.py bdb:$stack --params=active --one
+sxheader.py bdb:$stack --zero --params=xform.align2d --params=xform.projection
+
+# center particles 
+mpirun -np $proc sxali2d.py bdb:{$stack} out_bin{$bin}_sxali2d --ir={$ir} --ou={$ou} --rs={$rs} --xr="8 6 4 2 1" --yr="8 6 4 2 1" --ts="2 2 2 1 0.5" --dst=90 --MPI
+sxheader.py bdb:{$stack} --print --params=xform.align2d > out_bin{$bin}_sxali2d/fparamz.txt
+sxtransform2d.py bdb:{$stack} bdb:start_ali2d
+
+# Use ISAC 
+set i = 1
+while ( $i <= $generations)
+  mpirun -np $proc sxisac.py bdb:start_ali2d --img_per_grp=$imp_per_grp --stab_ali=$stab_ali --thld_err=$thld_err --generation=$i --MPI
+  set i = `expr $i + 1` 
+end
+
+# Use common lines to generate an image reconstruction
+#mpirun -np $proc sxfind_struct.py ISAC_avgs.hdf cmn_lns --ir=$ir --ou=$ou --delta=8 --lf=$lf --hf=$hf --rand_seed=10 --maxit=30 --MPIGA --MPI 

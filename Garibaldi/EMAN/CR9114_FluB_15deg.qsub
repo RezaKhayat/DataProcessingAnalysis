@@ -1,0 +1,61 @@
+#PBS -l nodes=1:ppn=4
+#PBS -l walltime=240:00:00
+#PBS -l cput=240:00:00
+#PBS -l mem=8gb
+
+cd /ddn/people/rkhayat/Wilson/CR9114_FluB
+
+# set number of processors
+set proc = 4
+
+rm -f recon_15deg
+ln -s $PBSREMOTEDIR recon_15deg
+chmod 755 recon_15deg
+
+proc3d ../CR9114_H9/threed.0a.mrc recon_15deg/threed.0a.mrc scale=1.11 clip=320,320,320 acfcen
+cd recon_15deg
+
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/11jul18e/align/Sparx/start_cmplx.hdf .
+proc2d start_cmplx.hdf start.hed
+
+setenv RUNPAR_RSH 'rsh'
+
+rm cls*.lst
+
+set i = 1
+set cycles = 90
+while ( $i < $cycles )
+
+  if ( $i < 10 ) then 
+    set shrink = 4
+    set angle = 15
+    set lp = 30
+    set fsc = 0
+  else if ( $i < 20 ) then
+    set shrink = 2
+    set angle = 10
+    set lp = 20
+    set fsc = 0
+  else if ( $i < 30 ) then
+    set shrink = 2
+    set angle = 5
+    set lp = 16
+    set fsc = 0
+  else
+    set shrink = 1
+    set lp = 16
+    set fsc = 1
+  endif
+
+  refine $i shrink={$shrink} mask=160 proc={$proc} ang={$angle} sym=C3 hard=50 median pad=320 classkeep=.8 classiter=8 phasecls > refine_{$i}.txt
+  proc3d threed.{$i}a.mrc out.mrc apix=1.09 lp={$lp}
+  mv -f out.mrc threed.{$i}a.mrc 
+  if ( $fsc > 0 ) then
+    eotest proc={$proc} sym=C3 hard=50 median mask=160 pad=320 classkeep=.8 classiter=8 > eotest_{$i}.txt
+    mv fsc.eotest fsc.eotest.{$i}
+  endif
+
+  rm cls*.lst
+  set i = `expr $i + 1`
+end
+

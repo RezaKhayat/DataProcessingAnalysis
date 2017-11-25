@@ -1,0 +1,59 @@
+; Scripts will align two 2D stacks then generate a parameter and a stack showing the alignment.
+; This is good for comparing reference free class averages to projections from a model.
+md
+set mp
+2
+
+[nimg] = 40            ; number of experimental images
+[r_nimg] = 52          ; number of reference images
+
+FR L
+  <referece_stack> UF_stain_scale_EMAN
+
+FR L
+  <experim_stack> PTA_stain
+
+FR L
+  <output> PTA_UF_compare_imgs
+
+FR L
+  <output_parm> PTA_UF_compare_param
+
+AP NQ                  ; alignment
+<referece_stack>@****  ; reference
+(1-[r_nimg])           ; image numbers
+6,2                    ; translation range, step
+5,70                   ; anuli radii
+<experim_stack>@****   ; data
+(1-[nimg])             ; image numbers
+<output_parm>          ; output
+
+[img] = 1              ; counter
+
+DO [k]=1,[nimg]
+  DE
+  _1
+  
+  UD IC [k],[ref],[cc],[inplane],[x],[y],[crap],[crap]
+    <output_parm>     
+
+  RT SQ
+  <experim_stack>@{****[k]}
+  _1                    ; output
+  ([inplane],1)         ; rotation  
+  ([x],[y])             ; shifts
+
+  CP
+  <referece_stack>@{****[ref]}
+  <output>@{****[img]}
+ 
+  [img] = [img] + 1
+
+  CP
+  _1
+  <output>@{****[img]}
+
+  [img] = [img] + 1
+ENDDO
+
+RE

@@ -1,0 +1,33 @@
+Parameter file for mrefine_sge.com
+
+data_input		volume
+raw_images1		FrealignStack
+thresh_reconst		75.0
+thresh_refine		25.0
+pixel_size		2.18
+dstep			10.9
+WGH			0.17
+CS                      2.0
+kV1			120.0
+radius			60.00
+PBC			100.0
+BOFF			35.0
+DANG			200.0
+ITMAX			50
+MODE			1
+XSTD			0.0	
+RBFACT			0.0
+FMAG			F
+FDEF			F
+FASTIG			F
+FPART			F
+dfsig			150.0
+IEWALD			2
+res_reconstruction	8.00
+res_low_refinement	500.0
+res_refinement		8.00
+start_process		3
+end_process		10
+first_particle		1
+last_particle		200
+increment		20

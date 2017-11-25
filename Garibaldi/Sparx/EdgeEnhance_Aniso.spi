@@ -1,0 +1,52 @@
+;  Script uses nonlinear anisotropy to enhace images.
+[verbosity] = 1
+
+IF ([verbosity].EQ.0) THEN
+  MD
+  Results off
+ENDIF
+
+MD
+set mp
+(0)
+
+; Set name of image stack (NOTE - path cannot be more than 80 characters) and .dat extension must be omitted
+FR L    ; this is essentially the prefix.  Stacks must be named, stack_001, stack_002, stack_003...
+  <image_stack>out_bin1_sxmref_128
+
+[images] = 2240       ; number of images in stack
+
+
+; things below here need not be changed
+fi x [nrow],[nsam]      ; Extract number of rows and pixels/row from image
+<image_stack>@001       ;   image name
+(2,12)                  ;   nrow,nsam = header locations 2,12
+
+DE
+_12
+
+MS
+_12@
+([nrow],[nrow],1)
+([images])
+
+; edge enhance
+DO [k]=1,[images]
+  CE AD
+  <image_stack>@{******[k]}
+  _12@{******[k]}
+  HEG  
+  (100)
+  (0.1) 
+  (1,1)
+ENDDO
+
+DO [k]=1,[images]
+  AD F
+  <image_stack>@{******[k]}
+  _12@{******[k]}
+  (1,4.0)
+  <image_stack>_Enh@{******[k]}
+ENDDO
+
+EN

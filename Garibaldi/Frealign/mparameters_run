@@ -1,0 +1,46 @@
+Parameter file for mrefine.com
+
+working_directory       ./
+data_input              volume                 ; the volume and parameter file. volume should be normal (1sigma = protein).
+raw_images1             FrealignStack      ; the stack. Images should be black on white (raw images).  
+thresh_reconst          64.0               ; target phase residual cut-off for particle reconstruction.
+thresh_refine           45.0               ; target phase residual cut-off for particle refinement.    
+pixel_size              2.18
+dstep                   21.80              ; densitometer step size. This has a dramatic affect on CTF correction! I don't know why...
+WGH                     0.15               ; amplitude constrast for CTF correction (default=0.07). (-1 makes density white on black)
+kV1                     120.0
+Cs                      2.0
+FMATCH                  F                  ; Write out matching projections
+ROUT                    110.0              ; Outer radius of recon. in Angstroms
+RIN                     0.00               ; Inner radius of recon. in Angstroms
+PBC                     5.0                ; phase residual / psudo-B-factor conversion constant
+BOFF                    64.0               ; approx. avg. phase residual of all particles
+ASYM                    C3                 ; Symmetry card
+ALPHA                  -23.83000
+RISE                    11.06000
+NSUBUNITS               15
+NSTARTS                 4
+STIFFNESS               2.0
+DANG                    1.0                ; angular step size for angular search
+ITMAX                   10                 ; numb. of cycles of randomized search/refinement used in modes IFLAG=2,4
+MODE                    1                  ; IFLAG  mode of refinement 0=just_reconstruction 1=refinement_reconstrcution
+XSTD                    0.0                ; num. of stdev above mean (z-score) for masking of input low-pass filterd 3D model.
+RBFACT                -50.0                ; B-factor to apply to particle image projections before orientation determination or refinement.
+FMAG                    F                  ; magnification refinement
+FDEF                    F                  ; defocus refinement
+FASTIG                  F                  ; astigmatism refinement
+FPART                   F                  ; particle defocus refinement
+DFSTD                   50.0               ; defocus uncertainty
+IEWALD                  0                  ; Ewald correction
+FBEAUT                  T                  ; Apply real space symmetry averaging to output map
+FCREF                   T                  ; Apply FOM filter to final map
+IBLOW                   2                  ; Padding factor for reference structure. 1,2,4
+res_reconstruction      7.0                ; resolution to which reconstruction is calculated
+res_low_refinement      500.0              ; low pass filter for alignment
+res_refinement          10.0               ; high pass filter for alignment
+start_process           2                  ; not used...
+end_process             2                  ; not used...
+first_particle          1                  ; not used...
+last_particle           16176              ; not used...
+increment               10                 ; not used...
+

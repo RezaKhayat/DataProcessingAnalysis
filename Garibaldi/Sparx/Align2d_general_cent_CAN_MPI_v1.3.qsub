@@ -1,0 +1,113 @@
+#PBS -l nodes=8:ppn=4
+#PBS -l walltime=400:00:00
+#PBS -l cput=1600:00:00
+#PBS -l mem=16gb
+
+cd /gpfs/home/rkhayat/Wilson/HIV_gp120Trimer/12apr19abe
+source ~/Applications/EMAN2/eman2.cshrc
+
+module load openmpi
+
+set proc = 32
+# set parameters for the stack
+set stack = start
+set bin = 4
+
+# iterations is nubmer of times classes are divided by 2.  Therefore total classes = 2^iterations
+set iterations=10
+
+# set parameters for the align2d search
+# these have the sampe definition as the variables in the Sparx manual
+set tr = '"8 6 4 2 1"'
+set ts = '"2 2 2 1 0.5"'
+set rs = 1
+set ir = 1
+set ou = 32
+
+rm -f recon_cent_RF_v1.1
+ln -s $PBSREMOTEDIR recon_cent_RF_v1.1  
+chmod 755 recon_cent_RF_v1.1   
+cd recon_cent_RF_v1.1
+
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12apr19a/stacks/stack2/start_untilt.hed .
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12apr19a/stacks/stack2/start_untilt.img .
+
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12apr19a/stacks/stack2/start_tilt.hed .
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12apr19a/stacks/stack2/start_tilt.img .
+
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12apr19a/stacks/stack2/ctf_particles.sparx . 
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12apr19a/stacks/stack2/ctf_particles.frealign . 
+awk '{print $1 " " $2 " " $3 " " $4 " " $5 " " $6 " 0 0"}' ctf_particles.sparx > ctf_particles_new.sparx
+
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12apr19b/stacks/stack1/start_untilt.hed start_untilt_b.hed
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12apr19b/stacks/stack1/start_untilt.img start_untilt_b.img
+
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12apr19b/stacks/stack1/start_tilt.hed start_tilt_b.hed
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12apr19b/stacks/stack1/start_tilt.img start_tilt_b.img
+
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12apr19b/stacks/stack1/ctf_particles_b.sparx .
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12apr19b/stacks/stack1/ctf_particles_b.frealign .
+awk '{print $1 " " $2 " " $3 " " $4 " " $5 " " $6 " 0 0"}' ctf_particles_b.sparx >> ctf_particles_new.sparx
+
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12apr19e/stacks/stack1/start_untilt.hed start_untilt_e.hed
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12apr19e/stacks/stack1/start_untilt.img start_untilt_e.img
+
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12apr19e/stacks/stack1/start_tilt.hed start_tilt_e.hed
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12apr19e/stacks/stack1/start_tilt.img start_tilt_e.img
+
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12apr19e/stacks/stack1/ctf_particles_e.sparx .
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12apr19e/stacks/stack1/ctf_particles_e.frealign .
+awk '{print $1 " " $2 " " $3 " " $4 " " $5 " " $6 " 0 0"}' ctf_particles_e.sparx >> ctf_particles_new.sparx
+
+
+# prepare the stack for Sparx. Later comment: this centering screws everything up! Do not use it.
+# proc2d start_Total.hed Full_Stack_bin.hed shrink={$bin}
+# cenalignint Full_Stack_bin.hed mask=27
+
+if ( $bin > 1 ) then
+  e2proc2d.py start_untilt.hed bdb:Full_Stack --process=normalize                    
+  e2proc2d.py start_tilt.hed bdb:Full_Stack --process=normalize                    
+  e2proc2d.py start_untilt_b.hed bdb:Full_Stack --process=normalize
+  e2proc2d.py start_tilt_b.hed bdb:Full_Stack --process=normalize
+  e2proc2d.py start_untilt_e.hed bdb:Full_Stack --process=normalize
+  e2proc2d.py start_tilt_e.hed bdb:Full_Stack --process=normalize
+  sxheader.py bdb:Full_Stack --import=ctf_particles_new.sparx --params=ctf
+  e2proc2d.py bdb:Full_Stack bdb:temp --meanshrink={$bin}
+  sxprocess.py bdb:temp bdb:{$stack} --phase_flip
+else
+  sxcpy.py Full_Stack.hed bdb:{$stack} 
+endif
+
+# set the parameters in the header to zero value
+sxheader.py bdb:{$stack} --zero --params=xform.align2d
+
+# activate the particles
+sxheader.py bdb:{$stack} --one --params=active
+
+# Reference free alignment and classification
+mpirun -np $proc sxali2d.py bdb:{$stack} out_bin{$bin}_sxali2d --ir={$ir} --ou={$ou} --rs={$rs} --xr="8 6 4 2 1" --yr="8 6 4 2 1" --ts="2 2 2 1 0.5" --MPI
+sxheader.py bdb:{$stack} --print --params=xform.align2d > out_bin{$bin}_sxali2d/fparamz.txt
+
+sxtransform2d.py bdb:{$stack} start_ali2d.hdf
+
+set particles = `e2iminfo.py bdb:{$stack} | grep "total images" | awk '{print $1}'`
+set iterations = `echo $particles | awk '{print $1 * 15}'`
+set box_dim = `e2iminfo.py bdb:{$stack}  | grep x | awk '{print $7}'`
+set xr = `echo $box_dim | awk '{print int($1/8)}' | awk '{if ($1 % 2 == 0) print $1; else print $1+1}'`
+set i = 1
+set p_round = 1
+
+while ($i <= $iterations)
+  set round = `echo $p_round | awk '{print 2*$1}'`
+  proc2d start_ali2d.hdf start_ali2d.hed norm
+  mkdir out_bin{$bin}_CAN_{$round}/
+  /gpfs/home/rkhayat/Applications/Adapt2_01/CAN start_ali2d out_bin{$bin}_CAN_{$round}/averages $iterations 0.1 0.001 20 {$round}
+  proc2d out_bin{$bin}_CAN_{$round}/averages_avg.hed out_bin{$bin}_CAN_{$round}/averages_avg.hdf
+  mpirun -np $proc sxmref_ali2d.py bdb:{$stack} out_bin{$bin}_CAN_{$round}/averages_avg.hdf out_bin{$bin}_sxmref_{$round} --ir={$ir} --ou={$ou} --rs={$rs} --xr={$xr} --yr={$xr} --ts=2 --center=0 --maxit=6  --MPI
+  sxheader.py bdb:{$stack} --print --params=xform.align2d > out_bin{$bin}_sxmref_{$round}/fparamz.txt
+  rm -rf start_ali2d.*  
+  sxtransform2d.py bdb:{$stack} start_ali2d.hdf
+  set p_round = `echo $round | awk '{print $1}'`
+  set i = `expr $i + 1`
+end
+

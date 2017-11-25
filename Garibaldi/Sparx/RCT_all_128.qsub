@@ -1,0 +1,100 @@
+#PBS -l nodes=1:ppn=4
+#PBS -l walltime=240:00:00
+#PBS -l cput=240:00:00
+#PBS -l mem=8gb
+
+#!/bin/csh
+
+#source ~/Applications/EMAN2_20100405/eman2.cshrc
+cd /gpfs/home/rkhayat/Wilson/HIV_gp120Trimer/12jan06e
+source ~/Applications/EMAN2/eman2.cshrc
+
+module load openmpi
+
+# alias epy '/home/rkhayat/Applications/EMAN2_20100405/python/Python-2.5.4-ucs4/bin/python'
+alias epy '/gpfs/home/rkhayat/Applications/EMAN2/Python-2.7-ucs4/bin/python'
+
+#This script produces RCT volumes after tilted particle picking, sparx alignment of untilted particles, and k-means clustering of untilted particles. It produces one volume for each class average output by k-means. It requires the helper scripts prep_tilts.py (transforms dcb angles and inplane rotation angles from alignment into xform.projection parameters for the tilted particles) activate_classes.py (activates particles in a given k-means cluster) , and make_actives_stack.py (produces a stack from the active k-means cluster for volume reconstruction; the stack is then erased).
+
+set proc = 4
+set untilt = start_rght.hdf   #../../align/Sparx/0tiltManualRCT/start.hdf' #aligned, untilted particle stack of class to be reconstructed with 2D alignment parameters
+set tilt = start_left.hdf    	#tilted particle stack consisting of particles in class to be reconstructed 
+set averages = 'multi_ref_RF128.hdf'                               #stack containing the reference free 2D class averages
+set tilt_list = serlist.dat				#tilted particle list for class to be reconstructed, micro number in the fourth column; the script expects the first row to be commented out
+set dcb_tmpl = dcb           				#dcb file template
+set dcb_ext = .dat					#extension after dcb file number
+set dcb_line = 7		                                #line number of dcb file where tilt parameters are stored (python numbering, first row is 0)
+set dcb_theta = 2                                         #column number in dcb file where theta (tilt angle) is stored (python numbering, first column is 0)
+set dcb_gamma = 3                                         #column number in dcb file where gamma (left image axis) value is stored (python numbering, first column is 0)
+set dcb_phi = 4	                                        #column number in dcb file where phi (right image axis) value is stored (python numbering, first column is 0)
+set far_edge = 1                                          #far-from-focus edge of micro 1 =left, 2 =right, 3=top, and 4=bottom
+set k_dir = k_20_4  		                        #directory of output where some information will be stored
+set numcls = 128                    		        #number of k-means clusters
+set sym = c1
+set bin = 4						# The value that the images were binned by for 2D RF class averageing.
+set radius = 19
+
+rm -rf recon_RCT_{$far_edge}
+ln -s $PBSREMOTEDIR recon_RCT_{$far_edge}
+e2proc2d.py recon_cent_RF_v1.1/start_left.hed recon_RCT_{$far_edge}/start_left.hdf --meanshrink={$bin}
+e2proc2d.py recon_cent_RF_v1.1/start_rght.hed recon_RCT_{$far_edge}/start_rght.hdf --meanshrink={$bin}
+cp recon_cent_RF_v1.1/out_bin4_sxmref_128/fparamz.txt recon_RCT_{$far_edge}/
+cp recon_cent_RF_v1.1/out_bin4_sxmref_128/multi_ref.hdf recon_RCT_{$far_edge}/multi_ref_RF128.hdf
+cp *py recon_RCT_{$far_edge}/
+
+cd recon_RCT_{$far_edge}/
+rsync -rltouv --partial amibox03.scripps.edu:/ami/data00/appion/12jan06e/RCT_particles/Parameters.tar .
+
+tar -xvf Parameters.tar
+
+set i = 0
+
+mkdir $k_dir
+#rm -rf stringplace
+
+sxheader.py $tilt --zero --params=xform.align2d --params=xform.projection 
+sxheader.py $untilt --import=fparamz.txt --params=xform.align2d 
+epy prep_tilts.py $tilt $untilt $dcb_tmpl $tilt_list $dcb_ext $dcb_line $dcb_theta $dcb_gamma $dcb_phi $far_edge
+#echo finished with prep_tilts.py
+
+while ( $i < $numcls )
+        echo while-loop on class $i
+
+        sxheader.py $untilt --params=active --zero
+        sxheader.py $tilt --params=active --zero
+        echo finished sxheader $untilt and $tilt
+
+        set k = `echo $i | awk '{printf "%03d \n", $1}'`
+
+        epy activate_classes_rk2.py $averages $untilt $k
+        epy activate_classes_rk2.py $averages $tilt $k
+        echo finished activate_classes.py for $untilt and $tilt $k
+
+        epy make_actives_stack.py $untilt temp.hdf 
+        sxtransform2d.py temp.hdf $k_dir/class${k}_stack.hdf
+        proc2d $k_dir/class${k}_stack.hdf $k_dir/class${k}_avg.mrc average
+        rm -rf temp.hdf
+
+        epy make_actives_stack.py $tilt temp.hdf
+        e2proc2d.py temp.hdf $k_dir/class${k}_stack.hdf
+        rm -rf temp.hdf
+        echo finished make_actives_stack.py $untilt and $tilt $k
+
+        sxrecons3d_n.py $k_dir/class${k}_stack.hdf $k_dir/init_vol_class${k}.hdf
+        echo finished sxrecons3d_n.py $k 
+
+        mpirun -np $proc sxali3d.py $k_dir/class${k}_stack.hdf $k_dir/init_vol_class${k}.hdf class${k}/ --ou=$radius --rs=1 --xr='8 4 2 1' --ts='4 2 1 1' --an='-1' --snr=1.00 --maxit=6 --ref_a=S --sym=$sym --function="[.,rk_functions,ref_ali3d]" --MPI
+        echo finished sxali3d
+	
+	# rm $k_dir/class${k}_stack.hdf
+        echo removed class${k}_stack.hdf
+	
+        set i = `expr $i + 1`
+
+end
+
+sxheader.py $tilt --params=active --zero
+
+#sxali3d.py $tilt $volume ali_$radius $mask  --ou=$radius --rs=1 --xr='8 4 2 1' --ts='4 2 1 1' --an='-1' --snr=1.00 --maxit=4 --ref_a=S
+
+

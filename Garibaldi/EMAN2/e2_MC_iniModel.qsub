@@ -1,0 +1,48 @@
+#PBS -l nodes=1:ppn=1
+#PBS -l walltime=240:00:00
+#PBS -l cput=240:00:00
+#PBS -l mem=8gb
+
+cd /gpfs/home/rkhayat/Wilson/HIV_gp120Trimer/12apr30e 
+source ~/Applications/EMAN2/eman2.cshrc
+
+set stack = '/gpfs/work/rkhayat/2815568.garibaldi01-adm.cluster.net/AbInitio_Averages.hed'
+set stack_box = 80
+set model = 'threed'
+set sym = c3
+set ou = 30
+set models = 10
+set apix = 4.36
+set lp = 25
+
+cd recon_cent_RF_v1.1/
+mkdir recon_MC
+cd recon_MC
+
+# set the parameters in the header to zero value
+set box = `echo $stack_box | awk '{print $1 * 2}'`
+e2proc2d.py $stack temp.hed --clip={$box},{$box}
+cenalignint temp.hed 
+proc2d ali.hed start.hdf clip={$stack_box},{$stack_box} edgenorm
+cp start.hdf start_MC.hdf
+rm -rf ali.* avg.* temp.*
+rm -rf bad.*
+
+set iter = 1
+set lpf = `echo $lp $apix | awk '{print $2/$1}'`
+
+while ($iter < $models)
+  sxheader.py start_MC.hdf --zero --params=xform.align2d --params=xform.projection
+  sxheader.py start_MC.hdf --one --params=active
+
+  e2montecarlorecon.py --classavg=start_MC.hdf --output=e2MC_{$iter}.mrc --sym=$sym > e2montecarlorecon_{$iter}.log
+  proc3d initial_models/e2MC_{$iter}.mrc e2MC_{$iter}.hdf norm
+
+  sxheader.py start_MC.hdf --zero --params=xform.align2d --params=xform.projection
+  sxheader.py start_MC.hdf --one --params=active
+
+  sxali3d.py start_MC.hdf e2MC_{$iter}.hdf refine_RF_e2MC_{$iter} --ou=$ou --rs=1 --xr='16 8 4 2' --ts='4 2 1 0.5' --an='-1' --snr=1.00 --maxit=20 --ref_a=S --sym=$sym
+  e2proc3d.py refine_RF_e2MC_{$iter}/vol0080.hdf EMAN2_MC_RF_{$iter}.mrc --apix=$apix --process=filter.lowpass.gauss:cutoff_freq=$lpf --process=normalize
+  set iter = `expr $iter + 1`
+end
+
